@@ -1,16 +1,22 @@
 # author - Anupama Rajaram
-# Date - September 8, 2016
+# Date - November 24, 2016
 # Description - News headline text analysis. This program does the following tasks:
 #               a) cleans the texts, 
 #               b) sorts and aggregates by publisher names
 #               c) creates word clouds and word associations
 
+# Dataset - uci-news-aggregator.csv
+# This file was obtained from Kaggle, an aggregation of news headlines 
+# published in different media and news sites.
+
 
 # =================================================================== #
 # Setting up workspace and required libraries.
 # =================================================================== #
-# call source file which will load all standard packages.
+# call source file which will load all standard packages. (included in this project repo)
 source("C:/anu/data analytics/twitter API - aug 2016/workspace_prep.R")
+
+# load library packages needed for text analysis.
 library(wordcloud)
 library(qdap)
 library(tm)
@@ -24,6 +30,7 @@ text_dict_source <- data.frame(fread("C:/anu/datasets/news-aggregate-dataset/uci
 text_sourcedf <- subset(text_dict_source, select = c("ID", "TITLE", "PUBLISHER"))
 rm(text_dict_source)
 
+
 # =============================================
 # clean up the headlines
 # =============================================
@@ -31,7 +38,11 @@ rm(text_dict_source)
 text_sourcedf$TITLE <- sapply(text_sourcedf$TITLE,function(row) 
   iconv(row, "latin1", "ASCII", sub=""))
 
-
+  
+  
+# =============================================
+# aggregate content from the top 20 Publisher
+# =============================================
 # convert publisher names to lower and then sort in decreasing order of frequency.
 text_sourcedf$publ = tolower(text_sourcedf$PUBLISHER)
 x = data.frame(table(text_sourcedf$publ), stringsAsFactors = FALSE)
@@ -40,7 +51,9 @@ colnames(x) = c("PublisherName", "Freq")
 
 
 # select the top 20 frequency publisher names
-publ = x[1:20,]
+# to increase or decrease this count, simply change the value of pubrct
+pubrct = 20
+publ = x[1:(pubrct),]
 rm(x)
 publ = unfactor(publ)
 
@@ -65,15 +78,10 @@ for(pub_num in 1:nrow(publ))
   
   # collect all the headlines by this publisher into a single array
   publ$Text[pub_num] = create_text(tempheadline)
-   
-  
 }
 
 #pbname = publ[pub_num,"PublisherName"]
-write.csv(publ, "publisher_headlines.csv", row.names = FALSE)
-
-
-
+# write.csv(publ, "publisher_headlines.csv", row.names = FALSE)
 
 # function to aggregate text specific to a single publisher/ media house.
 create_text<- function( tempheadline )
@@ -93,7 +101,9 @@ create_text<- function( tempheadline )
 
 
 
-
+# ================================================================
+# create word corpus and perform cleaning and pre-processing
+# ================================================================
 wordCorpus <- Corpus(VectorSource(publ$Text))
 summary(wordCorpus)
 
@@ -105,16 +115,16 @@ wordCorpus <- tm_map(wordCorpus, removeWords, stopwords("english"))
 wordCorpus <- tm_map(wordCorpus, stripWhitespace)
 wordCorpus <- tm_map(wordCorpus, stemDocument) 
 
-
- 
-
+  
+  
+# ================================================================
+# create word clouds 
+# ================================================================  
 # create wordcloud for Publisher = "Reuters", index = 1
 wordCorpus1 <- tm_map(wordCorpus[1], stemDocument)
 # code to create a word cloud:
 wordcloud(wordCorpus1, scale=c(5,0.5), max.words=100, random.order=FALSE, 
           rot.per=0.35, use.r.layout=FALSE, colors = brewer.pal(16, "Dark2"))
-
-
 
 # create wordcloud for Publisher = "thecelebritycafe.com", index = 11
 wordCorpus11 <- tm_map(wordCorpus[11], stemDocument)
@@ -122,15 +132,17 @@ wordCorpus11 <- tm_map(wordCorpus[11], stemDocument)
 wordcloud(wordCorpus11, scale=c(5,0.5), max.words=100, random.order=FALSE, 
           rot.per=0.35, use.r.layout=FALSE, colors = brewer.pal(16, "Dark2"))
 
-
-
 # create wordcloud for Publisher = "CBS Local", index = 20
 wordCorpus20 <- tm_map(wordCorpus[20], stemDocument)
 # code to create a word cloud:
 wordcloud(wordCorpus20, scale=c(5,0.5), max.words=100, random.order=FALSE, 
           rot.per=0.35, use.r.layout=FALSE, colors = brewer.pal(16, "Dark2"))
 
+  
 
+# ================================================================
+# Word frequency and word associations 
+# ================================================================  
 # Telling R that we have completed preprocessing, and to treat word-bag as text documents
 docsdf <- tm_map(wordCorpus, PlainTextDocument)  
 dtm <- DocumentTermMatrix(docsdf) 
@@ -139,23 +151,18 @@ dtm <- DocumentTermMatrix(docsdf)
 dtm
 dim(dtm)
 
-
 # create transpose of the DTM:
 tdm <- TermDocumentMatrix(docsdf)   
 tdm   
-
 
 # Organize terms by their frequency:
 freq <- colSums(as.matrix(dtm))   
 length(freq)  
 ord <- order(freq)
 
-
 #  Start by removing sparse terms:   
 dtms <- removeSparseTerms(dtm, 0.1) # This makes a matrix that is 10% empty space, maximum.   
 inspect(dtms) 
-
-
 
 # List most and least frequently occurring words.
 freq[head(ord)]  # least freq words
@@ -165,13 +172,10 @@ freq["tail"(ord)] # most freq words
 # identify all terms that appear frequently (500+ times).
 findFreqTerms(dtm, lowfreq=500)
 
-
-
 findAssocs(dtm, c("global" , "market"), corlimit=0.98)
 findAssocs(dtm, c("kim" , "kardashian"), corlimit=0.9)
 findAssocs(dtm, "bruce", corlimit=0.90) # specifying a correlation limit of 0.90   
 findAssocs(dtm, "ukrain", corlimit=0.95)
-
 
 # plot word association
 xfrqdf = findFreqTerms(dtm, lowfreq=800)
@@ -180,30 +184,25 @@ plot(dtm, term = xfrqdf, corThreshold = 0.12,
                                          fontsize=24, fontcolor="blue", color="red")))
 
 
-
+# ================================================================
+# Word Clusterings and dendograms
+# ================================================================  
 # Clustering by Term Similarity
 # remove infrequent words.
 dtmss <- removeSparseTerms(dtm, 0.01) # This makes a matrix that is only 1% empty space, maximum.   
 inspect(dtmss)   
-
-
-
+  
 library(cluster)   
 d <- dist(t(dtmss), method="euclidian")   
 fit <- hclust(d=d, method="ward")   
 fit  
 plot(fit, hang = -1)   
-
-
+  
 # making the dendogram easier to read
 plot.new()
 plot(fit, hang=-1)
 groups <- cutree(fit, k=5)   # "k=" defines the number of clusters you are using   
 rect.hclust(fit, k=5, border="red") # draw dendogram with red borders around the 5 clusters 
-
-
-
-
 
 # word clusters
 library(fpc)   
